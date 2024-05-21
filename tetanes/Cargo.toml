@@ -59,6 +59,7 @@ egui_extras = { version = "0.29", default-features = false, features = [
   "image",
   "serde",
 ] }
+egui_plot = "0.29"
 gilrs = { version = "0.11", features = ["serde-serialize"] }
 hound = "3.5"
 image.workspace = true
