@@ -555,6 +555,20 @@ impl ControlDeck {
         fs::save(path, &self.cpu).map_err(Error::SaveState)
     }
 
+    /// Save the current state out to an in-memory byte buffer.
+    ///
+    /// # Errors
+    ///
+    /// If there is an issue saving the state, then an error is returned.
+    pub fn save_state_out(&self) -> Result<Vec<u8>> {
+        if self.loaded_rom().is_none() {
+            return Err(Error::RomNotLoaded);
+        }
+
+        let save_data = fs::save_out(&self.cpu).map_err(Error::SaveState)?;
+        Ok(save_data)
+    }
+
     /// Load the console with data saved from a save state, if it exists.
     ///
     /// # Errors

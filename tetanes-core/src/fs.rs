@@ -128,8 +128,9 @@ where
     T: ?Sized + Serialize,
 {
     // serialize w/ bincode
-    let data =
-        bincode::serialize(value).map_err(|err| Error::SerializationFailed(err.to_string()))?;
+    let config = bincode::config::legacy();
+    let data = bincode::serde::encode_to_vec(value, config)
+        .map_err(|err| Error::SerializationFailed(err.to_string()))?;
 
     // prepare a buffer to write to
     let mut buf = Vec::new();
