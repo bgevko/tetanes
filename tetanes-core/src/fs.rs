@@ -122,6 +122,30 @@ where
     Ok(())
 }
 
+pub fn save_out<T>(value: &T) -> Result<Vec<u8>>
+where
+    T: ?Sized + Serialize,
+{
+    // serialize w/ bincode
+    let data =
+        bincode::serialize(value).map_err(|err| Error::SerializationFailed(err.to_string()))?;
+
+    // prepare a buffer to write to
+    let mut buf = Vec::new();
+
+    // write the header
+    write_header(&mut buf).map_err(Error::WriteHeaderFailed)?;
+
+    // compress the data
+    encode(&mut buf, &data).map_err(Error::EncodingFailed)?;
+
+    // flush the buffer
+    buf.flush()
+        .map_err(|err| Error::io(err, "failed to save data"))?;
+
+    Ok(buf)
+}
+
 pub fn save_raw(path: impl AsRef<Path>, value: &[u8]) -> Result<()> {
     let mut writer = fs::writer_impl(path)?;
     writer
