@@ -437,7 +437,9 @@ impl Renderer {
         let path = Config::default_config_dir().join("gui.dat");
         if fs::exists(&path) {
             let data = fs::load_raw(path).context("failed to load gui memory")?;
-            let memory = bincode::deserialize(&data).context("failed to deserialize gui memory")?;
+            let config = bincode::config::legacy();
+            let (memory, _) = bincode::serde::decode_from_slice(&data, config)
+                .context("failed to deserialize gui memory")?;
             ctx.memory_mut(|mem| {
                 *mem = memory;
             });
@@ -462,7 +464,9 @@ impl Renderer {
 
         let path = Config::default_config_dir().join("gui.dat");
         self.ctx.memory(|mem| {
-            let data = bincode::serialize(&mem).context("failed to serialize gui memory")?;
+            let config = bincode::config::legacy();
+            let data = bincode::serde::encode_to_vec(mem, config)
+                .context("failed to serialize gui memory")?;
             fs::save_raw(path, &data).context("failed to save gui memory")
         })?;
         self.last_save_time = Instant::now();
@@ -612,16 +616,15 @@ impl Renderer {
 
         let window = event_loop.create_window(window_attrs)?;
 
-        if let Some(size) = inner_size {
-            if window
+        if let Some(size) = inner_size
+            && window
                 .request_inner_size(PhysicalSize::new(
                     pixels_per_point * size.x,
                     pixels_per_point * size.y,
                 ))
                 .is_some()
-            {
-                debug!("Failed to set window size");
-            }
+        {
+            debug!("Failed to set window size");
         }
         if let Some(size) = min_inner_size {
             window.set_min_inner_size(Some(PhysicalSize::new(
@@ -840,10 +843,10 @@ impl Renderer {
                 }
                 ViewportCommand::StartDrag => {
                     // If `.has_focus()` is not checked on x11 the input will be permanently taken until the app is killed!
-                    if window.has_focus() {
-                        if let Err(err) = window.drag_window() {
-                            tracing::warn!("{command:?}: {err}");
-                        }
+                    if window.has_focus()
+                        && let Err(err) = window.drag_window()
+                    {
+                        tracing::warn!("{command:?}: {err}");
                     }
                 }
                 ViewportCommand::InnerSize(size) => {
@@ -1107,35 +1110,35 @@ impl Renderer {
 
         // Copy NES frame buffer before drawing UI because a UI interaction might cause a texture
         // resize tied to a configuration change.
-        if viewport_id == ViewportId::ROOT {
-            if let Some(render_state) = &self.painter.borrow().render_state() {
-                let mut frame_buffer = self.frame_rx.try_recv_ref();
-                while self.frame_rx.remaining() < 2 {
-                    trace!("skipping frame");
-                    frame_buffer = self.frame_rx.try_recv_ref();
+        if viewport_id == ViewportId::ROOT
+            && let Some(render_state) = &self.painter.borrow().render_state()
+        {
+            let mut frame_buffer = self.frame_rx.try_recv_ref();
+            while self.frame_rx.remaining() < 2 {
+                trace!("skipping frame");
+                frame_buffer = self.frame_rx.try_recv_ref();
+            }
+            match frame_buffer {
+                Ok(frame_buffer) => {
+                    let gui = self.gui.borrow_mut();
+                    let is_ntsc = gui.loaded_region().unwrap_or(cfg.deck.region).is_ntsc();
+                    gui.nes_texture.update(
+                        &render_state.queue,
+                        if cfg.renderer.hide_overscan && is_ntsc {
+                            &frame_buffer[OVERSCAN_TRIM..frame_buffer.len() - OVERSCAN_TRIM]
+                        } else {
+                            &frame_buffer
+                        },
+                    );
                 }
-                match frame_buffer {
-                    Ok(frame_buffer) => {
-                        let gui = self.gui.borrow_mut();
-                        let is_ntsc = gui.loaded_region().unwrap_or(cfg.deck.region).is_ntsc();
-                        gui.nes_texture.update(
-                            &render_state.queue,
-                            if cfg.renderer.hide_overscan && is_ntsc {
-                                &frame_buffer[OVERSCAN_TRIM..frame_buffer.len() - OVERSCAN_TRIM]
-                            } else {
-                                &frame_buffer
-                            },
-                        );
-                    }
-                    Err(TryRecvError::Closed) => {
-                        error!("frame channel closed unexpectedly, exiting");
-                        event_loop.exit();
-                        return Ok(());
-                    }
-                    // Empty frames are fine as we may repaint more often than 60fps due to
-                    // UI interactions with keyboard/mouse
-                    _ => (),
+                Err(TryRecvError::Closed) => {
+                    error!("frame channel closed unexpectedly, exiting");
+                    event_loop.exit();
+                    return Ok(());
                 }
+                // Empty frames are fine as we may repaint more often than 60fps due to
+                // UI interactions with keyboard/mouse
+                _ => (),
             }
         }
 

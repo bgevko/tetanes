@@ -292,12 +292,11 @@ impl Painter {
     }
 
     pub fn on_window_resized(&mut self, viewport_id: ViewportId, width: u32, height: u32) {
-        if let (Some(width), Some(height)) = (NonZeroU32::new(width), NonZeroU32::new(height)) {
-            if let Some(surface) = self.surfaces.get_mut(&viewport_id) {
-                if let Some(render_state) = &mut self.render_state {
-                    render_state.resize_surface(surface, width, height);
-                }
-            }
+        if let (Some(width), Some(height)) = (NonZeroU32::new(width), NonZeroU32::new(height))
+            && let Some(surface) = self.surfaces.get_mut(&viewport_id)
+            && let Some(render_state) = &mut self.render_state
+        {
+            render_state.resize_surface(surface, width, height);
         }
     }
 
@@ -376,26 +375,23 @@ impl RenderState {
             },
             ..Default::default()
         };
-        let mut connection = adapter.request_device(&device_descriptor, None).await;
+        let mut connection = adapter.request_device(&device_descriptor).await;
         // Creating device may fail if adapter doesn't support the default cfg, so try to
         // recover with lower limits. Specifically max_texture_dimension_2d has a downlevel default
         // of 2048. egui_wgpu wants 8192 for 4k displays, but not all platforms support that yet.
         if let Err(err) = connection {
             tracing::error!("failed to create wgpu device: {err:?}, retrying with lower limits");
             connection = adapter
-                .request_device(
-                    &wgpu::DeviceDescriptor {
-                        required_limits: wgpu::Limits {
-                            max_texture_dimension_2d: 4096,
-                            // Default Edge installed on Windows 10 is limited to 6 attachments,
-                            // and we never need more than 1.
-                            max_color_attachments: 6,
-                            ..base_limits
-                        },
-                        ..device_descriptor
+                .request_device(&wgpu::DeviceDescriptor {
+                    required_limits: wgpu::Limits {
+                        max_texture_dimension_2d: 4096,
+                        // Default Edge installed on Windows 10 is limited to 6 attachments,
+                        // and we never need more than 1.
+                        max_color_attachments: 6,
+                        ..base_limits
                     },
-                    None,
-                )
+                    ..device_descriptor
+                })
                 .await
         }
 
