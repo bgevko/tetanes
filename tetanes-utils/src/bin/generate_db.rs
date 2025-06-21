@@ -31,16 +31,6 @@ fn main() -> anyhow::Result<()> {
             File::create(GAME_DB_TXT).with_context(|| format!("failed to open {GAME_DB_TXT}"))?,
         );
 
-        // let mut games = path
-        //     .read_dir()
-        //     .unwrap_or_else(|err| panic!("unable read directory {path:?}: {err}"))
-        //     .filter_map(Result::ok)
-        //     .filter(|f| f.path().extension() == Some(OsStr::new("nes")))
-        //     .map(|f| f.path())
-        //     .map(Game::new)
-        //     .filter_map(Result::ok)
-        //     .collect::<Vec<_>>();
-
         let mut games = Vec::new();
         for entry in path
             .read_dir()

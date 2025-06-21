@@ -53,7 +53,7 @@ impl Error {
     }
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 #[must_use]
 pub struct GameInfo {
     pub crc32: u32,

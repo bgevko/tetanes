@@ -199,6 +199,8 @@ pub struct LoadedRom {
     pub battery_backed: bool,
     /// Auto-detected of the loaded Cart.
     pub region: NesRegion,
+    /// Canonical cartridge info from the game database, if available.
+    pub cart_info: Option<crate::cart::GameInfo>,
 }
 
 /// Represents an NES Control Deck. Encapsulates the entire emulation state.
@@ -303,6 +305,7 @@ impl ControlDeck {
             name: name.clone(),
             battery_backed: cart.battery_backed(),
             region: cart.region(),
+            cart_info: cart.game_info.clone(),
         };
         if self.auto_detect_region {
             self.cpu.set_region(loaded_rom.region);
@@ -497,6 +500,13 @@ impl ControlDeck {
     #[must_use]
     pub fn sram(&self) -> &[u8] {
         self.cpu.bus.sram()
+    }
+
+    /// Returns cart info associated with the currently loaded ROM, if available.
+    pub fn cart_info(&self) -> Option<&crate::cart::GameInfo> {
+        self.loaded_rom
+            .as_ref()
+            .and_then(|rom| rom.cart_info.as_ref())
     }
 
     /// Save battery-backed Save RAM to a file (if cartridge supports it)
