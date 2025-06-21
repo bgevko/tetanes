@@ -1,5 +1,6 @@
 use anyhow::Context;
 use clap::Parser;
+use std::panic::{self, AssertUnwindSafe};
 use std::{
     env,
     ffi::OsStr,
@@ -24,19 +25,72 @@ fn main() -> anyhow::Result<()> {
         .path
         .unwrap_or_else(|| env::current_dir().unwrap_or_default());
     let header = "# CRC, Region, Mapper, PrgRomSize, ChrRomSize, ChrRamSize, PrgRamSize, Battery, Mirroring, SubMapper, Title";
+
     if path.is_dir() {
         let mut db_txt_file = BufWriter::new(
             File::create(GAME_DB_TXT).with_context(|| format!("failed to open {GAME_DB_TXT}"))?,
         );
-        let mut games = path
+
+        // let mut games = path
+        //     .read_dir()
+        //     .unwrap_or_else(|err| panic!("unable read directory {path:?}: {err}"))
+        //     .filter_map(Result::ok)
+        //     .filter(|f| f.path().extension() == Some(OsStr::new("nes")))
+        //     .map(|f| f.path())
+        //     .map(Game::new)
+        //     .filter_map(Result::ok)
+        //     .collect::<Vec<_>>();
+
+        let mut games = Vec::new();
+        for entry in path
             .read_dir()
-            .unwrap_or_else(|err| panic!("unable read directory {path:?}: {err}"))
-            .filter_map(Result::ok)
-            .filter(|f| f.path().extension() == Some(OsStr::new("nes")))
-            .map(|f| f.path())
-            .map(Game::new)
-            .filter_map(Result::ok)
-            .collect::<Vec<_>>();
+            .with_context(|| format!("reading directory {:?}", path))?
+        {
+            let entry = match entry {
+                Ok(e) => e,
+                Err(e) => {
+                    eprintln!("Skipping an unreadable directory entry: {:?}", e);
+                    continue;
+                }
+            };
+            let rom_path = entry.path();
+            if rom_path.extension() != Some(OsStr::new("nes")) {
+                continue;
+            }
+
+            // 1) Catch panics inside Game::new
+            let new_game = panic::catch_unwind(AssertUnwindSafe(|| Game::new(rom_path.clone())));
+
+            match new_game {
+                // It didn’t panic
+                Ok(Ok(mut game)) => {
+                    // If apply_corrections or anything else panics, you can wrap that too:
+                    let result = panic::catch_unwind(AssertUnwindSafe(|| {
+                        apply_corrections(&mut game);
+                        game.clone()
+                    }));
+
+                    match result {
+                        Ok(game_after) => games.push(game_after),
+                        Err(_) => {
+                            eprintln!(
+                                "Skipping {:?}: panicked while applying corrections",
+                                rom_path
+                            );
+                        }
+                    }
+                }
+                // Game::new returned an Err
+                Ok(Err(err)) => {
+                    eprintln!("Skipping {:?}: error parsing header – {:?}", rom_path, err);
+                }
+                // Game::new panicked
+                Err(_) => {
+                    eprintln!("Skipping {:?}: panicked while parsing", rom_path);
+                }
+            }
+        }
+
         games.sort_by_key(|game| game.crc32);
         let mut entries = Vec::with_capacity(games.len());
         writeln!(db_txt_file, "{header}")?;
@@ -65,6 +119,7 @@ fn main() -> anyhow::Result<()> {
                 region: *region,
                 mapper_num: *mapper,
                 submapper_num: *submapper,
+                title: title.clone(),
             });
         }
         fs::save(GAME_DB, &entries)?;
@@ -102,7 +157,7 @@ fn apply_corrections(game: &mut Game) {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[must_use]
 pub struct Game {
     crc32: u32,
@@ -152,7 +207,10 @@ impl Game {
             prg_ram_banks,
             battery: cart.battery_backed(),
             mirroring,
-            title: filename.to_string_lossy().to_string(),
+            title: filename
+                .to_string_lossy()
+                .trim_end_matches(".nes")
+                .to_string(),
         })
     }
 }

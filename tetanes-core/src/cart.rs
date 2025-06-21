@@ -60,6 +60,7 @@ pub struct GameInfo {
     pub region: NesRegion,
     pub mapper_num: u16,
     pub submapper_num: u8,
+    pub title: String,
 }
 
 /// An NES cartridge.
