@@ -502,11 +502,13 @@ impl ControlDeck {
         self.cpu.bus.sram()
     }
 
-    /// Returns cart info associated with the currently loaded ROM, if available.
-    pub fn cart_info(&self) -> Option<&crate::cart::GameInfo> {
+    /// Returns cart title associated with the currently loaded ROM, if available.
+    #[inline]
+    pub fn cart_title(&self) -> String {
         self.loaded_rom
             .as_ref()
             .and_then(|rom| rom.cart_info.as_ref())
+            .map_or_else(|| "Unknown".to_string(), |info| info.title.clone())
     }
 
     /// Save battery-backed Save RAM to a file (if cartridge supports it)
@@ -610,7 +612,7 @@ impl ControlDeck {
         if self.loaded_rom().is_none() {
             return Err(Error::RomNotLoaded);
         };
-        
+
         fs::load_bytes::<Cpu>(data)
             .map_err(Error::SaveState)
             .map(|mut cpu| {
