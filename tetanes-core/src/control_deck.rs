@@ -601,7 +601,25 @@ impl ControlDeck {
         }
     }
 
-    /// Load the raw underlying frame buffer from the PPU for further processing.
+    /// Load the console with data from a byte buffer containing a save state.
+    ///
+    /// # Errors
+    ///
+    /// If there is an issue loading the save state, then an error is returned.
+    pub fn load_state_in(&mut self, data: &[u8]) -> Result<()> {
+        if self.loaded_rom().is_none() {
+            return Err(Error::RomNotLoaded);
+        };
+        
+        fs::load_bytes::<Cpu>(data)
+            .map_err(Error::SaveState)
+            .map(|mut cpu| {
+                cpu.bus.input.clear(); // Discard inputs from save states
+                self.load_cpu(cpu)
+            })
+    }
+
+    /// Load a raw underlying frame buffer from the PPU for further processing.
     pub fn frame_buffer_raw(&mut self) -> &[u16] {
         self.cpu.bus.ppu.frame_buffer()
     }
